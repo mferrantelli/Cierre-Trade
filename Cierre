@@ -1,0 +1,296 @@
+def Cierre(Precio_Apertura, Quantity, Porc_SL, Posicion, USD, S, Tengo_Antes, FechayHoraApertura, Crypto, Precio_TP, Precio_SL, Precios_eMail, Precio_Maximo, Precio_Minimo, Temp1, Temp2, Factor_Margin, Palanca, Ratio, Trading, USD_Predefinido, USD_P):
+
+    bot = RobotBinance(Crypto, Temp1)
+    
+    Config = open(Archivo_Config, "r")
+    Config.seek(0)
+    Sonido = int(str.split(Config.readlines()[14])[1])
+    Config.seek(0)
+    Porcentaje_Diario = float(str.split(Config.readlines()[22])[1])
+    Config.seek(0)
+    Porcentaje_Semanal = float(str.split(Config.readlines()[23])[1])
+    Config.seek(0)
+    Dia_Ultimo_Trade = str.split(Config.readlines()[24])[1]
+    Config.seek(0)
+    Semana_Ultimo_Trade = str.split(Config.readlines()[25])[1]
+    Config.close()
+
+    df = LeerExcel()[7]
+
+    S += 1
+
+    Monto_Apertura = USD
+
+    FechayHoraCierre = datetime.now().astimezone().strftime('%d/%m/%Y %H:%M')
+
+    if Trading == 0:
+
+        Precio_Cierre = bot.symbol_price()
+
+        Costo_Comision = (Comision_T/100 * Precio_Apertura * Quantity) + (Comision_T/100 * Precio_Cierre * Quantity) 
+     
+        if Posicion == 'Long' :
+            Diferencia = ((Precio_Cierre - Precio_Apertura)* Quantity) - Costo_Comision
+            # print ( 'Diferencia en Long =', Diferencia)
+        else:
+            Diferencia = ((Precio_Apertura - Precio_Cierre)* Quantity) - Costo_Comision
+            # print ( 'Diferencia en Short =', Diferencia)
+        
+        if USD_Predefinido == 0:
+            Porcentaje_Trade_Bruto = Diferencia / USD
+
+        if USD_Predefinido == 1:
+            Porcentaje_Trade_Bruto = Diferencia / USD_P
+
+        Porcentaje_Trade_CC = round ((Porcentaje_Trade_Bruto * 100), 2)
+
+        Monto_Cierre = Monto_Apertura + (Monto_Apertura * Porcentaje_Trade_CC)
+
+        Monto_Trade = Monto_Cierre - Monto_Apertura
+
+    else:
+
+        Posicion_Abierta = bot.Cerrar_Posiciones_Futures(Crypto)  
+
+        time.sleep(1)
+
+        while Posicion_Abierta == True:
+            print('Se reintenta cerrar la posicion')
+            bot.Cerrar_Posiciones_Futures(Crypto)  #
+            time.sleep(2)
+    
+        Datos_Cierre = bot.Datos_Cierre(Crypto)
+        PNL = Datos_Cierre[0]
+        Costo_Comision = Datos_Cierre[1]
+        Precio_Cierre = Datos_Cierre[2]
+
+        Monto_Trade = PNL - Costo_Comision
+    
+        if USD_Predefinido == 1:
+            Porcentaje_Trade_CC = round(((Monto_Trade * 100) / USD_P), 3)
+        if USD_Predefinido == 0:
+            Porcentaje_Trade_CC = round(((Monto_Trade * 100) / (Tengo_Antes * Factor_Margin)), 3)
+
+        Monto_Cierre = Monto_Apertura + PNL
+
+
+    #print('Precio_Apertura', Precio_Apertura)
+    #print('Precio_Cierre', Precio_Cierre)
+    #print('Costo_Comision', Costo_Comision)
+    #print('Capital_Obtenido', Capital_Obtenido)
+    #print('Diferencia', Diferencia)
+    #print('Porcentaje_Trade_CC', Porcentaje_Trade_CC)
+
+    Trades_Perdidos = int(LeerExcel()[0])
+    Trades_Ganados = int(LeerExcel()[1])
+    Trades_BE = int(LeerExcel()[2])
+    
+    if -0.05 <= Porcentaje_Trade_CC <= 0.05:
+    # if Porcentaje_Trade_CC == 0:
+        Resultado = 'Break even'
+        Trades_BE += 1
+        Color = 'blue'
+        if Sonido == 1:
+            playsound('Sonidos/Trade_BE.mp3')
+            try:
+                playsound(f'Sonidos/{Estrategia_Sola}.mp3')
+                playsound(f'Sonidos/{Cliente}.mp3')            
+            except:
+                pass
+    
+    if Porcentaje_Trade_CC > 0.05:
+        Resultado = 'Gané'
+        Trades_Ganados += 1
+        Color = 'green'
+        if Sonido == 1:
+            playsound('Sonidos/Trade_Ganado.mp3')
+            try:
+                playsound(f'Sonidos/{Estrategia_Sola}.mp3')
+                playsound(f'Sonidos/{Cliente}.mp3')      
+            except:
+                pass
+                  
+
+    if Porcentaje_Trade_CC < -0.05: 
+        Resultado = 'Perdí'
+        Trades_Perdidos += 1
+        Color = 'red'
+        if Sonido == 1:
+            playsound('Sonidos/Trade_Perdido.mp3')
+            try:
+                playsound(f'Sonidos/{Estrategia_Sola}.mp3')
+                playsound(f'Sonidos/{Cliente}.mp3')      
+            except:
+                pass
+
+#     Mensaje_Ultimo_Trade = (f'{FechayHoraCierre} - Cerré posición {Posicion} a {Precio_Cierre}\n{Resultado} {Porcentaje_Trade_CC} %\nMonto del trade: {Monto_Trade}\nCosto Comision: {Costo_Comision}\nTrades hechos: {S}\nGanados: {Trades_Ganados} - Break Even: {Trades_BE} - Perdidos: {Trades_Perdidos}')
+    Mensaje_Ultimo_Trade = (f'{FechayHoraCierre} - Cerré posición {Posicion} a {Precio_Cierre}\n\n{Resultado} {Porcentaje_Trade_CC} %\n\nTrades hechos: {S}\nGanados: {Trades_Ganados} - Break Even: {Trades_BE} - Perdidos: {Trades_Perdidos}')
+    Mensaje_Ultimo_Trade_eMail = (f'{FechayHoraCierre} - Cerré posición {Posicion} a {Precio_Cierre}<br><br><font color={Color}>{Resultado} {Porcentaje_Trade_CC} %</font><br><br>Trades hechos: <font color="blue">{S}</font><br>Ganados: <font color="green">{Trades_Ganados}</font> - Break Even: <font color="blue">{Trades_BE}</font> - Perdidos: <font color="red">{Trades_Perdidos}</font>')
+
+    print(Mensaje_Ultimo_Trade)
+
+    Porc_Trade_Ant = LeerExcel()[5]
+    Porcentaje_Total = round(((((1 + (Porc_Trade_Ant/100))*(1 + (Porcentaje_Trade_CC/100))) -1 )*100), 3)
+    #Porcentaje_Total = round((((Porc_Trade_Ant/100) + (Porcentaje_Trade_CC/100)) + ((Porc_Trade_Ant/100) * (Porcentaje_Trade_CC/100))), 2)
+    #Porcentaje_Total = round((((Porc_Trade_Ant) + (Porcentaje_Trade_CC)) + ((Porc_Trade_Ant) * (Porcentaje_Trade_CC))), 2)
+    
+    Monto_Total = round((LeerExcel()[6] + Monto_Trade), 3)
+    
+   
+    if Moneda == 'BUSD':
+        Tengo_Despues = bot.BUSD_Disponible_Futures()
+    if Moneda == 'USDT':
+        Tengo_Despues = bot.USDT_Disponible_Futures()
+
+    print('Tengo Después: ', Tengo_Despues, ' - Porcentaje Total: ', Porcentaje_Total)
+    print(f'Fecha y hora del 1er Trade   : {Primer_Trade}')
+    
+    start_time = datetime.strptime(Primer_Trade,'%d/%m/%Y %H:%M')
+    end_time = datetime.strptime(FechayHoraCierre, '%d/%m/%Y %H:%M')
+    time_difference = end_time - start_time
+    Horas_Transcurridas = time_difference.total_seconds() / 3600
+    Dias_Transcurridos = time_difference.total_seconds() / (86400)
+
+    Porc_por_h = round(Porcentaje_Total/Horas_Transcurridas, 3)
+    Porc_por_d = round(Porcentaje_Total/Dias_Transcurridos, 3)
+    Porc_Acierto = round((Trades_Ganados * 100) / S, 3)
+    
+    print(f'Porcentaje promedio por hora : {Porc_por_h} %/h')
+    print(f'Porcentaje promedio por día  : {Porc_por_d} %/d')
+    print(f'Porcentaje de acierto        : {Porc_Acierto} %')
+ 
+
+    df.loc[S] = {'Par': bot.pair, 'Temporalidad 1': Temp1, 'Temporalidad 2': Temp2, 'Posición': Posicion,
+                 'Fecha y Hora Apertura': FechayHoraApertura, 'Precio Apertura': Precio_Apertura, 'Monto Apertura': Monto_Apertura,
+                 'Palanca': Palanca, 'Cantidad': Quantity, 'Precio TP': Precio_TP, 'Precio SL': Precio_SL, 'Fecha y Hora Cierre': FechayHoraCierre,
+                 'Precio Cierre': Precio_Cierre, 'Monto Cierre': Monto_Cierre, 'Monto Trade': Monto_Trade,
+                 'Monto Total': Monto_Total, 'Porcentaje Trade': Porcentaje_Trade_CC, 'Porcentaje Total': Porcentaje_Total,
+                 'Trades Hechos': S, 'Ganados': Trades_Ganados, 'Break Even': Trades_BE, 'Perdidos': Trades_Perdidos,
+                 'Ratio': Ratio, 'Multiplicador BB': MultiplicadorBB, 'Condición Entrada': Condicion_Entrada, 'Condición Salida': Condicion_Salida, 'Observaciones': Observaciones}
+
+    df.to_excel(Path, sheet_name = Hoja, index=False)
+
+    
+    if Trading == 1:
+        try:
+            bot.Cambiar_Palanca(Crypto, 1)
+            print ("Se configura palanca:", 1)
+        except:
+            print ("No se ha podido configurar la palanca")
+        try:        
+            bot.Cambiar_TipoMargin(Crypto, 'ISOLATED')
+            print ("Se configura tipo de Margin ISOLATED")
+        except:    
+            print ("Se configura tipo de Margin ISOLATED.")
+
+##    if Resultado == 'Perdí':
+##        print('Penitencia de 10 minutos')
+##        time.sleep(600)
+##        
+##    else:
+##        print('Espero un minuto')
+##        time.sleep(60)
+    
+
+    EscriboAE(15, 'Trade_en_Curso', 0)
+
+    EscriboAE(19, 'Porcentaje_Total', Porcentaje_Total)
+
+    Dia_Trade = datetime.now().astimezone().strftime('%d')
+    Semana_Trade = datetime.now().astimezone().strftime('%W')
+       
+    if Dia_Ultimo_Trade == Dia_Trade:
+        Porcentaje_Diario = Porcentaje_Diario + Porcentaje_Trade_CC
+    else:
+        Porcentaje_Diario = Porcentaje_Trade_CC
+        
+        
+    if Semana_Ultimo_Trade == Semana_Trade:
+        Porcentaje_Semanal = Porcentaje_Semanal + Porcentaje_Trade_CC
+    else:
+        Porcentaje_Semanal = Porcentaje_Trade_CC
+
+
+    EscriboAE(22, 'Porcentaje_Diario', Porcentaje_Diario)
+    EscriboAE(23, 'Porcentaje_Semanal', Porcentaje_Semanal)
+    EscriboAE(24, 'Dia_Ultimo_Trade', Dia_Trade)
+    EscriboAE(25, 'Semana_Ultimo_Trade', Semana_Trade)
+
+
+    print(f'Porcentaje_Diario : {Porcentaje_Diario:.3f}')
+    print(f'Porcentaje_Semanal: {Porcentaje_Semanal:.3f}')
+    print('Dia_Ultimo_Trade', Dia_Trade)
+    print('Semana_Ultimo_Trade', Semana_Trade)
+
+
+    Mensaje_Porcentaje_Total = (f'Porcentaje Total: {Porcentaje_Total}')
+    if Porcentaje_Total > 0:
+        ColorP = "green"
+    elif Porcentaje_Total < 0:
+        ColorP = "red"
+    else:
+        ColorP = "blue"
+    Mensaje_Porcentaje_Total_eMail = (f'<b>Porcentaje Total: <font color={ColorP}>{Porcentaje_Total} %</font></b>')
+
+    Mensaje_Tengo_Despues = (f'Tengo después: {Tengo_Despues}')
+    # Mensaje_Firma_Disclaimer = str(f'\n\n​BoTTrader YEM\n Tu futuro financiero de forma inteligente y segura\n bottraderyem@gmail.com \n\n\n\n El uso de nuestro servicio de trading automatizado de criptomonedas implica ciertos riesgos, incluyendo la posibilidad de pérdida de capital. Este servicio se proporciona únicamente con fines informativos y educativos, y no debe ser considerado como asesoramiento financiero o de inversión. La información y los datos proporcionados por nuestro servicio son de naturaleza general y no tienen en cuenta las circunstancias individuales de cada inversor. No garantizamos resultados específicos ni rentabilidad, y no somos responsables de las decisiones de inversión tomadas por los usuarios de nuestro servicio. Es responsabilidad del usuario evaluar los riesgos y beneficios de cualquier inversión en criptomonedas y tomar decisiones de inversión informadas. Al utilizar nuestro servicio, aceptas los términos y condiciones y este descargo de responsabilidad.')
+    Mensaje_Firma_Disclaimer = str(f'<br><br><b><font size="4" color="#808080">BoTTrader </font><font size="4" color="#94E827">Y<font size="2"> </font><font size="4" color="#94E827">E<font size="2"</font> <font size="4" color="#94E827">M</font></b><br> Tu futuro financiero de forma inteligente y segura<br> bottraderyem@gmail.com <br><br><br><br>\n\n\n\n El uso de nuestro servicio de trading automatizado de criptomonedas implica ciertos riesgos, incluyendo la posibilidad de pérdida de capital. Este servicio se proporciona únicamente con fines informativos y educativos, y no debe ser considerado como asesoramiento financiero o de inversión. La información y los datos proporcionados por nuestro servicio son de naturaleza general y no tienen en cuenta las circunstancias individuales de cada inversor. No garantizamos resultados específicos ni rentabilidad, y no somos responsables de las decisiones de inversión tomadas por los usuarios de nuestro servicio. Es responsabilidad del usuario evaluar los riesgos y beneficios de cualquier inversión en criptomonedas y tomar decisiones de inversión informadas. Al utilizar nuestro servicio, aceptas los términos y condiciones y este descargo de responsabilidad.')
+
+    # Mensaje = str((f'{Version} - {Cliente}\nPar: {bot.pair} Futures\nFecha y hora de comienzo: {Primer_Trade}\nTenía antes: {Tengo_Antes}\n{Mensaje_Ultimo_Trade}\n{Precios}\nPrecio Máximo: {Precio_Maximo}\nPrecio Mínimo: {Precio_Minimo}\nTenía Antes: {Tengo_Antes}\nTengo Ahora: {Tengo_Despues}\n{Mensaje_Porcentaje_Total}\n\n{Mensaje_Firma_Disclaimer}'))
+    # Mensaje = str((f'{Version} - {Cliente}\nPar: {bot.pair} Futures\nFecha y hora de comienzo: {Primer_Trade}\nTenía antes: {Tengo_Antes}\n{Mensaje_Ultimo_Trade}\n{Precios}\nPrecio Máximo: {Precio_Maximo}\nPrecio Mínimo: {Precio_Minimo}\nTenía Antes: {Tengo_Antes}\nTengo Ahora: {Tengo_Despues}\n{Mensaje_Porcentaje_Total}\nPorcentaje promedio por hora : {Porc_por_h} %/h\nPorcentaje promedio por día   : {Porc_por_d} %/d\n{Mensaje_Firma_Disclaimer}'))
+    # Mensaje = str((f'{Version} - {Cliente}\nPar: {bot.pair} Futures\nFecha y hora de comienzo: {Primer_Trade}\n{Mensaje_Ultimo_Trade}\n{Precios}\nPrecio Máximo: {Precio_Maximo}\nPrecio Mínimo: {Precio_Minimo}\nTenía Antes: {Tengo_Antes}\nTengo Ahora: {Tengo_Despues}\n{Mensaje_Porcentaje_Total}\nPorcentaje promedio por hora : {Porc_por_h} %/h\nPorcentaje promedio por día   : {Porc_por_d} %/d\nPorcentaje Diario : {Porcentaje_Diario}\nPorcentaje Semanal : {Porcentaje_Semanal}\n\n\n{Mensaje_Firma_Disclaimer}'))
+
+    Mensaje_PDF = ''
+
+    Trade = {}
+    # Trade['Crypto'] = Crypto
+    Trade['Resultado'] = Resultado
+    Trade['Porcentaje'] = Porcentaje_Trade_CC
+    # Trade['Monto'] = Monto_Trade
+    Trade['Dia_Trade'] = Dia_Trade
+    Trade['Semana_Trade'] = Semana_Trade
+    # print('Trade', Trade)
+    if len(Ultimos_Trades) == 5:
+        Ultimos_Trades.pop(0)    
+    Ultimos_Trades.append(Trade)
+    Trade = {}
+    print(Ultimos_Trades)
+
+
+    if (Porcentaje_Diario < Perdida_Max_Diaria):
+        print('-----------------------------------------------------------------------------------')
+        Mensaje_PDF = (f'Porcentaje de pérdida diario excedido.\nNo se harán mas trades por el dia de hoy\nPorcentaje de pérdida máxima diaria: {Perdida_Max_Diaria} - Porcentaje diario: {round(Porcentaje_Diario,2)}')
+
+    if (Porcentaje_Semanal < Perdida_Max_Semanal):
+        print('-----------------------------------------------------------------------------------')
+        Mensaje_PDF = (f'Porcentaje de pérdida semanal excedido.\nNo se harán mas trades por esta semana\nPorcentaje de pérdida máxima semanal: {Perdida_Max_Semanal} - Porcentaje semanal: {round(Porcentaje_Semanal,2)}')
+
+    if (Ganancia_Max_Diaria < Porcentaje_Diario):
+        print('-----------------------------------------------------------------------------------')
+        Mensaje_PDF = (f'Porcentaje de ganancia diario excedido.\nNo se harán mas trades por el dia de hoy\nPorcentaje de ganancia máxima diaria: {Ganancia_Max_Diaria} - Porcentaje diario: {round(Porcentaje_Diario,2)}')
+
+    print(Mensaje_PDF)
+
+    # Mensaje = str((f'{Version} - {Cliente}\nPar: {bot.pair} Futures\nFecha y hora de comienzo: {Primer_Trade}\nTenía antes: {Tengo_Antes}\n{Mensaje_Ultimo_Trade}\n{Precios}\nPrecio Máximo: {Precio_Maximo}\nPrecio Mínimo: {Precio_Minimo}\nTenía Antes: {Tengo_Antes}\nTengo Ahora: {Tengo_Despues}\n{Mensaje_Porcentaje_Total}\nPorcentaje promedio por hora : {Porc_por_h} %/h\nPorcentaje promedio por día   : {Porc_por_d} %/d\nPorcentaje de acierto               : {Porc_Acierto}\n{Mensaje_PDF}\n\n\n{Mensaje_Firma_Disclaimer}'))
+    # Mensaje = str((f'{Estrategia} - {Cliente}\nPar: {bot.pair} Futures\nFecha y hora de comienzo: {Primer_Trade}\n\n{Mensaje_Ultimo_Trade}\n{Precios}\nPrecio Máximo: {Precio_Maximo}\nPrecio Mínimo: {Precio_Minimo}\n\nTenía Antes: {Tengo_Antes}\nTengo Ahora: {Tengo_Despues}\n\n{Mensaje_Porcentaje_Total}\n\nPorcentaje promedio por hora : {Porc_por_h} %/h\nPorcentaje promedio por día   : {Porc_por_d} %/d\nPorcentaje de acierto               : {Porc_Acierto} %\n{Mensaje_Firma_Disclaimer}'))
+    Mensaje = str((f'{Version} - {Cliente}<br>Par: {bot.pair} Futures<br>Fecha y hora de comienzo: {Primer_Trade}<br><br>{Mensaje_Ultimo_Trade_eMail}<br>{Precios_eMail}<br>Precio Máximo Alcanzado: {Precio_Maximo}<br>Precio Mínimo Alcanzado: {Precio_Minimo}<br><br>Tenía Antes: {Tengo_Antes}<br>Tengo Ahora: {Tengo_Despues}<br><br>{Mensaje_Porcentaje_Total_eMail}<br><br>Porcentaje promedio por hora : {Porc_por_h} %<br>Porcentaje promedio por día    : {Porc_por_d} %/d<br>Porcentaje de acierto                : {Porc_Acierto} %<br>{Mensaje_Firma_Disclaimer}'))
+    
+
+    if Cliente != 'Max':  
+        send_email("mferrantelli@gmail.com", Subject, Mensaje)
+    if Cliente != 'Gonza': 
+        send_email("gonnuvicario@hotmail.com", Subject, Mensaje)
+    if Cliente != 'Ariel Favole': 
+        send_email("favoleariel@gmail.com", Subject, Mensaje)
+    send_email(emailCliente, Subject, Mensaje)
+
+
+    M = '   ' + Estrategia + ' - ' + Cliente + '   '
+
+    print('-----------------------------------------------------------------------------------')
+    print(M.center(83, '-'))
+    print('-----------------------------------------------------------------------------------')
+
+
+    time.sleep(20)
+        
